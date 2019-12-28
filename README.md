@@ -1,5 +1,5 @@
 # Linefier
-A program used to replicate images using a single smooth line.
+A program used to replicate images using a single continous smooth line
 
 ## Installation
 After cloning the repository you will need to install both opencv and numpy. You can install them with `pip3 install -r requirements.txt`  
