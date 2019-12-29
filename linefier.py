@@ -2,7 +2,6 @@
 import argparse
 import cv2
 import numpy as np
-import os
 import random
 import sys
 
@@ -60,6 +59,26 @@ def fitness(target, img):
     return np.sum(delta) / (delta.shape[0] * delta.shape[1] * 255**2)
 
 
+def generateRandomImages(target, img, points, args):
+    new_imgs = []
+
+    for _ in range(args.tries):
+        # Generating points until one is in range
+        while True:
+            point = newPoint(img, args)
+            dx = points[-1][0] - point[0]
+            dy = points[-1][1] - point[1]
+            if args.min_line_length**2 < dx**2 + dy**2 < args.max_line_length**2:
+                break
+
+        new_imgs.append((drawBezier(img, points[-1], point, args), point))
+
+    new_imgs.sort(key=lambda x: fitness(target, x[0]))
+
+    return new_imgs
+
+
+
 def generatePoints(target, args):
     points = []
     img    = np.full(target.shape, int(args.background_color * 255), np.uint8)
@@ -87,21 +106,11 @@ def generatePoints(target, args):
         # Breaking if the user want's to limit the amount of curves
         if args.curves != -1 and curves >= args.curves: break
 
+        # Breaking if ten previous loops couldn't add a new curve
+        if n_failed >= 10: break
+
         # Generating multiple random images and sorting them based on their fitness
-        new_imgs = []
-
-        for _ in range(args.tries):
-            # Generating points until one is in range
-            while True:
-                point = newPoint(img, args)
-                dx = points[-1][0] - point[0]
-                dy = points[-1][1] - point[1]
-                if args.min_line_length**2 < dx**2 + dy**2 < args.max_line_length**2:
-                    break
-
-            new_imgs.append((drawBezier(img, points[-1], point, args), point))
-
-        new_imgs.sort(key=lambda x: fitness(target, x[0]))
+        new_imgs = generateRandomImages(img, target, points, args)
 
         # Only adding the new curve if it improves the generated image
         if prev_fitness > fitness(target, new_imgs[0][0]):
@@ -110,11 +119,7 @@ def generatePoints(target, args):
             points.append(new_imgs[0][1])
             n_failed = 0
         else:
-            # Stopping the program if there are ten failed attempts
-            # at creating new curves
             n_failed += 1
-            if n_failed >= 10:
-                break
 
         # Saving every 50th image
         if curves % 50 == 0:
@@ -124,11 +129,11 @@ def generatePoints(target, args):
             if curves < args.animation_slow_frames:
                 video.write(img)
 
-            # Smoothly changing to the requested animation_speed
+            # 'Smoothly' changing to the requested animation_speed
             if curves % 60 == 0 and animation_speed < args.animation_speed:
                 animation_speed += 1
 
-            elif curves % animation_speed == 0:
+            if curves % animation_speed == 0:
                 video.write(img)
 
         print(f' Curves: {curves}    Difference: {round(prev_fitness * 100, 1):>5}% ', end='\r')
@@ -139,8 +144,8 @@ def generatePoints(target, args):
     print()
     cv2.imwrite('generated.png', img)
 
+    # Freezing the last frame in the animation
     if args.animate:
-        # Freezing the last frame
         for _ in range(args.animation_freezeframes):
             video.write(img)
 
@@ -158,7 +163,6 @@ def generatePoints(target, args):
 #   <x:float> <y:float>
 #   ....
 #   <x:float> <y:float>
-
 def export(target, points, args):
     if args.export:
         ret = [(points[0][0], points[0][1])]
@@ -205,25 +209,32 @@ def loadTarget(args):
 
 # Very basic input validation. Mainly for helping the user, not to improve security
 def validateInput(args):
-    errors = []
-    if args.size                   <= 0: errors.append('size must be greater than 0')
-    if args.curves                 < -1: errors.append('curves must be greater than 0 or -1')
-    if args.tries                  <= 0: errors.append('tries must be greater than 0')
-    if args.max_arc                <= 0: errors.append('max_arc must be greater than 0')
-    if args.min_line_length        <= 0: errors.append('min_line_length must be greater than 0')
-    if args.max_line_length        <= 0: errors.append('max_line_length must be greater than 0')
-    if args.thickness              <= 0: errors.append('thickness must be greater than 0')
-    if args.animation_speed        <= 0: errors.append('animation_speed must be greater than 0')
-    if args.animation_slow_frames  <= 0: errors.append('animation_slow_frames must be greater than 0')
-    if args.animation_freezeframes <= 0: errors.append('animation_freezeframes must be greater than 0')
+    errors = (
+        # Making sure that ints are not negative
+        (args.size                   <= 0, 'size must be greater than 0'),
+        (args.curves                 < -1, 'curves must be greater than 0 or -1'),
+        (args.tries                  <= 0, 'tries must be greater than 0'),
+        (args.max_arc                <= 0, 'max_arc must be greater than 0'),
+        (args.min_line_length        <= 0, 'min_line_length must be greater than 0'),
+        (args.max_line_length        <= 0, 'max_line_length must be greater than 0'),
+        (args.thickness              <= 0, 'thickness must be greater than 0'),
+        (args.animation_speed        <= 0, 'animation_speed must be greater than 0'),
+        (args.animation_slow_frames  <= 0, 'animation_slow_frames must be greater than 0'),
+        (args.animation_freezeframes <= 0, 'animation_freezeframes must be greater than 0'),
 
-    if not (0 <= args.opacity          <= 1): errors.append('opacity must be in range [0, 1]')
-    if not (0 <= args.background_color <= 1): errors.append('background_color must be in range [0, 1]')
-    if not (0 <= args.line_color       <= 1): errors.append('line_color must be in range [0, 1]')
+        # Making sure that floats are in range [0, 1]
+        (not 0 <= args.opacity          <= 1, 'opacity must be in range [0, 1]'),
+        (not 0 <= args.background_color <= 1, 'background_color must be in range [0, 1]'),
+        (not 0 <= args.line_color       <= 1, 'line_color must be in range [0, 1]'),
+    )
 
-    if errors:
-        for error in errors:
+    has_errors = False
+    for error, hint in errors:
+        if error:
             print(error)
+            has_errors = True
+
+    if has_errors:
         sys.exit(1)
 
 
@@ -231,7 +242,7 @@ def validateInput(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('image', help='Path to an image. The higher the contrast the better')
-    parser.add_argument('--export', help='Export line coordinates normalized to width')
+    parser.add_argument('--export', help='Export normalized line coordinates into a file')
 
     parser.add_argument('--animate', action='store_true', help='Saves generated images during the creation process')
 
