@@ -1,4 +1,6 @@
 /ignore/
 /venv/
 /animationFrames/
-/generated.png
+/generated*
+/animation*
+/coords*

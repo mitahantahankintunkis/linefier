@@ -64,6 +64,13 @@ def generatePoints(target, args):
     points = []
     img    = np.full(target.shape, int(args.background_color * 255), np.uint8)
 
+    if args.animate:
+        video  = cv2.VideoWriter('animation.avi',
+                                 cv2.VideoWriter_fourcc(*'MJPG'),
+                                 60,
+                                 (target.shape[1], target.shape[0]),
+                                 False)
+
     # Creating the starting point
     point = newPoint(img, args)
     while target[point[1]][point[0]] == int(args.background_color * 255):
@@ -74,6 +81,7 @@ def generatePoints(target, args):
     prev_fitness = 1
     n_failed = 0
     curves = 0
+    animation_speed = 1
 
     while True:
         # Breaking if the user want's to limit the amount of curves
@@ -113,17 +121,30 @@ def generatePoints(target, args):
             cv2.imwrite('generated.png', img)
 
         if args.animate:
-            if not os.path.exists('./animationFrames'):
-                os.makedirs('./animationFrames')
-            cv2.imwrite(f'./animationFrames/generated_{curves:0>5}.png', img)
+            if curves < args.animation_slow_frames:
+                video.write(img)
 
-        print(f' Curves: {curves}    Difference: {round(prev_fitness * 100, 1):>5}%      ', end='\r')
+            # Smoothly changing to the requested animation_speed
+            if curves % 60 == 0 and animation_speed < args.animation_speed:
+                animation_speed += 1
+
+            elif curves % animation_speed == 0:
+                video.write(img)
+
+        print(f' Curves: {curves}    Difference: {round(prev_fitness * 100, 1):>5}% ', end='\r')
         sys.stdout.flush()
 
         curves += 1
 
     print()
     cv2.imwrite('generated.png', img)
+
+    if args.animate:
+        # Freezing the last frame
+        for _ in range(args.animation_freezeframes):
+            video.write(img)
+
+        video.release()
 
     return points
 
@@ -185,13 +206,16 @@ def loadTarget(args):
 # Very basic input validation. Mainly for helping the user, not to improve security
 def validateInput(args):
     errors = []
-    if args.size            <= 0: errors.append('size must be greater than 0')
-    if args.curves          < -1: errors.append('curves must be greater than 0 or -1')
-    if args.tries           <= 0: errors.append('tries must be greater than 0')
-    if args.max_arc         <= 0: errors.append('max_arc must be greater than 0')
-    if args.min_line_length <= 0: errors.append('min_line_length must be greater than 0')
-    if args.max_line_length <= 0: errors.append('max_line_length must be greater than 0')
-    if args.thickness       <= 0: errors.append('thickness must be greater than 0')
+    if args.size                   <= 0: errors.append('size must be greater than 0')
+    if args.curves                 < -1: errors.append('curves must be greater than 0 or -1')
+    if args.tries                  <= 0: errors.append('tries must be greater than 0')
+    if args.max_arc                <= 0: errors.append('max_arc must be greater than 0')
+    if args.min_line_length        <= 0: errors.append('min_line_length must be greater than 0')
+    if args.max_line_length        <= 0: errors.append('max_line_length must be greater than 0')
+    if args.thickness              <= 0: errors.append('thickness must be greater than 0')
+    if args.animation_speed        <= 0: errors.append('animation_speed must be greater than 0')
+    if args.animation_slow_frames  <= 0: errors.append('animation_slow_frames must be greater than 0')
+    if args.animation_freezeframes <= 0: errors.append('animation_freezeframes must be greater than 0')
 
     if not (0 <= args.opacity          <= 1): errors.append('opacity must be in range [0, 1]')
     if not (0 <= args.background_color <= 1): errors.append('background_color must be in range [0, 1]')
@@ -211,16 +235,19 @@ def main():
 
     parser.add_argument('--animate', action='store_true', help='Saves generated images during the creation process')
 
-    parser.add_argument('-s', '--size',       default=512,  type=int,   help='Maximum dimension of the generated image. Higher values slow the program down fast')
-    parser.add_argument('-n', '--curves',     default=-1,   type=int,   help='Maximum amount of curves the program can draw. By default the program decides itself')
-    parser.add_argument('-t', '--tries',      default=200,  type=int,   help='Number of random curves tried before adding one. Higher values produce better images')
-    parser.add_argument('--max_arc',          default=64,   type=int,   help='How round the drawn curves are')
-    parser.add_argument('--min_line_length',  default=64,   type=int,   help='The smallest distance a single curve can have')
-    parser.add_argument('--max_line_length',  default=128,  type=int,   help='The larget distance a single curve can have')
-    parser.add_argument('--thickness',        default=1,    type=int,   help='Thickness of the drawn line')
-    parser.add_argument('--opacity',          default=0.25, type=float, help='Opacity of the drawn line')
-    parser.add_argument('--background_color', default=1,    type=float, help='Color of the background ranging from 0 to 1')
-    parser.add_argument('--line_color',       default=0,    type=float, help='Color of the line ranging from 0 to 1')
+    parser.add_argument('-s', '--size',              default=512,  type=int,   help='Maximum dimension of the generated image. Higher values slow the program down fast')
+    parser.add_argument('-n', '--curves',            default=-1,   type=int,   help='Maximum amount of curves the program can draw. By default the program decides itself')
+    parser.add_argument('-t', '--tries',             default=200,  type=int,   help='Number of random curves tried before adding one. Higher values produce better images')
+    parser.add_argument('--max_arc',                 default=64,   type=int,   help='How round the drawn curves are')
+    parser.add_argument('--min_line_length',         default=64,   type=int,   help='The smallest distance a single curve can have')
+    parser.add_argument('--max_line_length',         default=128,  type=int,   help='The larget distance a single curve can have')
+    parser.add_argument('--thickness',               default=1,    type=int,   help='Thickness of the drawn line')
+    parser.add_argument('--opacity',                 default=0.25, type=float, help='Opacity of the drawn line')
+    parser.add_argument('--background_color',        default=1,    type=float, help='Color of the background ranging from 0 to 1')
+    parser.add_argument('--line_color',              default=0,    type=float, help='Color of the line ranging from 0 to 1')
+    parser.add_argument('--animation_speed',         default=4,    type=int,   help='Speed multiplier for the animation')
+    parser.add_argument('--animation_slow_frames',   default=180,  type=int,   help='How many frames at the start have a speed of 1')
+    parser.add_argument('--animation_freezeframes',  default=120,  type=int,   help='For how many frames are the last frame shown')
     args = parser.parse_args()
 
     validateInput(args)
