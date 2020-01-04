@@ -110,7 +110,7 @@ def generatePoints(target, args):
         if n_failed >= 10: break
 
         # Generating multiple random images and sorting them based on their fitness
-        new_imgs = generateRandomImages(img, target, points, args)
+        new_imgs = generateRandomImages(target, img, points, args)
 
         # Only adding the new curve if it improves the generated image
         if prev_fitness > fitness(target, new_imgs[0][0]):
